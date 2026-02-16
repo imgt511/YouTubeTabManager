@@ -5,7 +5,8 @@
   "description": "Lists all open YouTube tabs with video titles via context menu",
   "permissions": [
     "tabs",
-    "contextMenus"
+    "contextMenus",
+    "scripting"
   ],
   "host_permissions": [
     "*://www.youtube.com/*"
@@ -20,11 +21,21 @@
     "128": "icons/icon-128.png"
   },
   "action": {
+    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png",
       "48": "icons/icon-48.png",
       "128": "icons/icon-128.png"
+    }
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Y",
+        "mac": "Command+Shift+Y"
+      },
+      "description": "Open YouTube Tab Manager"
     }
   }
 }
