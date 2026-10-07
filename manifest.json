@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "YouTube Tab Lister",
   "version": "1.0",
-  "description": "Lists all open YouTube tabs with video titles via context menu",
+  "description": "Manage open YouTube tabs with a popup list, playback controls, and context menu actions.",
   "permissions": [
     "tabs",
     "contextMenus",
