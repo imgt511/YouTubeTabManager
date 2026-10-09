@@ -33,4 +33,4 @@ A Chrome extension that helps you manage and navigate your open YouTube tabs eff
 
 ## License
 
-[MIT](LICENSE)
+No license file is included yet.

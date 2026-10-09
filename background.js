@@ -11,16 +11,15 @@ class YouTubeTabManager {
   }
 
   init() {
-    this.createRootMenu().then(() => {
-      this.setupEventListeners();
-      // Initial menu population after root is created
-      setTimeout(() => this.updateMenus(), 100);
-    });
+    // Listeners must be registered synchronously at the top level of a
+    // Manifest V3 service worker, or Chrome may drop events that wake it.
+    this.setupEventListeners();
+    this.updateMenus();
   }
 
   setupEventListeners() {
-    chrome.runtime.onInstalled.addListener(() => this.createRootMenu());
-    chrome.runtime.onStartup.addListener(() => this.createRootMenu());
+    chrome.runtime.onInstalled.addListener(() => this.updateMenus());
+    chrome.runtime.onStartup.addListener(() => this.updateMenus());
     
     chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       if (this.shouldUpdateMenu(changeInfo, tab)) {
@@ -217,10 +216,9 @@ class YouTubeTabManager {
   }
 
   async activateTab(tabId, windowId) {
-    // Focus window first (crucial for macOS)
-    await chrome.windows.update(windowId, { focused: true });
-    // Then activate the specific tab
+    // Activate the tab first, then focus its window (needed on macOS).
     await chrome.tabs.update(tabId, { active: true });
+    await chrome.windows.update(windowId, { focused: true });
   }
 }
 

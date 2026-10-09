@@ -33,7 +33,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }, new Map());
 
         // Render tabs
-        windowGroups.forEach((windowTabs, windowId) => {
+        let windowIndex = 1;
+        windowGroups.forEach((windowTabs) => {
             // Add a separator for different windows if needed
             if (windowGroups.size > 1) {
                 const separator = document.createElement('div');
@@ -41,9 +42,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 separator.style.fontSize = '12px';
                 separator.style.color = '#aaaaaa';
                 separator.style.fontWeight = '500';
-                separator.textContent = `Window ${windowId}`;
+                separator.textContent = `Window ${windowIndex}`;
                 tabList.appendChild(separator);
             }
+            windowIndex++;
 
             windowTabs.forEach(tab => {
                 const tabEl = createTabElement(tab);
@@ -111,7 +113,7 @@ function createTabElement(tab) {
     el.className = `tab-item ${tab.active ? 'active' : ''}`;
 
     // Clean title
-    const cleanTitle = tab.title
+    const cleanTitle = (tab.title || 'YouTube Video')
         .replace(/ - YouTube$/, '')
         .replace(/^\(\d+\)\s*/, '')
         .trim();
@@ -142,27 +144,17 @@ function createTabElement(tab) {
     el.appendChild(info);
 
     // Click to activate tab
+    // Click to activate tab.
+    // Activate the tab first, then focus its window. Focusing the window
+    // can close the popup, which would stop any code after it from running.
     el.addEventListener('click', async () => {
-        await chrome.windows.update(tab.windowId, { focused: true });
-        await chrome.tabs.update(tab.id, { active: true });
-        window.close();
-    });
-
-    // Mouse hover updates selection to sync with keyboard
-    el.addEventListener('mouseenter', () => {
-        // Find index of this element
-        const allTabs = document.querySelectorAll('.tab-item');
-        for (let i = 0; i < allTabs.length; i++) {
-            if (allTabs[i] === el) {
-                // Update global selectedIndex (but we need access to it)
-                // Since we are inside createTabElement, we don't have direct access to 'selectedIndex' variable easily without refactoring.
-                // However, simple hover effect is handled by CSS. 
-                // Mixing mouse/keyboard Selection state can be tricky. 
-                // For now, let's keep them separate or let CSS handle hover, JS handle keyboard.
-                // One improvement: If user hovers, maybe we *should* update the keyboard index?
-                // Let's implement that in the main scope instead if we wanted to.
-                // For now, keep it simple.
-            }
+        try {
+            await chrome.tabs.update(tab.id, { active: true });
+            await chrome.windows.update(tab.windowId, { focused: true });
+        } catch (err) {
+            console.error('Could not activate tab:', err);
+        } finally {
+            window.close();
         }
     });
 
