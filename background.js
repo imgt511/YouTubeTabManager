@@ -1,3 +1,8 @@
+// Contexts that show our menu. "video" is needed because right-clicking
+// directly on a video element otherwise matches only the "video" context,
+// which hides items that use just "page".
+const MENU_CONTEXTS = ["page", "selection", "link", "video"];
+
 class YouTubeTabManager {
   constructor() {
     this.tabsCache = new Map();
@@ -6,7 +11,7 @@ class YouTubeTabManager {
       "*://youtube.com/watch*",
       "*://m.youtube.com/watch*"
     ];
-    
+
     this.init();
   }
 
@@ -20,29 +25,29 @@ class YouTubeTabManager {
   setupEventListeners() {
     chrome.runtime.onInstalled.addListener(() => this.updateMenus());
     chrome.runtime.onStartup.addListener(() => this.updateMenus());
-    
+
     chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       if (this.shouldUpdateMenu(changeInfo, tab)) {
         this.updateMenus();
       }
     });
-    
+
     chrome.tabs.onRemoved.addListener(() => this.updateMenus());
     chrome.tabs.onCreated.addListener(() => this.updateMenus());
-    
+
     chrome.contextMenus.onClicked.addListener((info, tab) => {
       this.handleMenuClick(info, tab);
     });
   }
 
   shouldUpdateMenu(changeInfo, tab) {
-    return (changeInfo.status === 'complete' || changeInfo.title) && 
+    return (changeInfo.status === 'complete' || changeInfo.title) &&
            this.isYouTubeTab(tab);
   }
 
   isYouTubeTab(tab) {
     return tab?.url && (
-      tab.url.includes('youtube.com/watch') || 
+      tab.url.includes('youtube.com/watch') ||
       tab.url.includes('m.youtube.com/watch')
     );
   }
@@ -53,7 +58,7 @@ class YouTubeTabManager {
         chrome.contextMenus.create({
           id: "youtube-tabs-root",
           title: "YouTube Tabs",
-          contexts: ["page", "selection", "link"]
+          contexts: MENU_CONTEXTS
         }, () => {
           if (chrome.runtime.lastError) {
             console.log('Root menu creation handled:', chrome.runtime.lastError.message);
@@ -67,8 +72,8 @@ class YouTubeTabManager {
   async updateMenus() {
     try {
       const tabs = await this.getYouTubeTabs();
-      await this.clearOldMenuItems(); // Now properly awaited
-      
+      await this.clearOldMenuItems();
+
       if (tabs.length === 0) {
         this.createEmptyMenuItem();
         return;
@@ -76,7 +81,7 @@ class YouTubeTabManager {
 
       const windowGroups = this.groupTabsByWindow(tabs);
       this.createMenuStructure(windowGroups);
-      
+
     } catch (error) {
       console.error('Failed to update context menus:', error);
     }
@@ -90,9 +95,9 @@ class YouTubeTabManager {
     return new Promise(resolve => {
       chrome.contextMenus.removeAll(() => {
         chrome.contextMenus.create({
-          id: "youtube-tabs-root", 
+          id: "youtube-tabs-root",
           title: "YouTube Tabs",
-          contexts: ["page", "selection", "link"]
+          contexts: MENU_CONTEXTS
         }, () => {
           if (chrome.runtime.lastError) {
             console.log('Menu recreation handled:', chrome.runtime.lastError.message);
@@ -104,25 +109,13 @@ class YouTubeTabManager {
     });
   }
 
-  safeRemoveMenuItem(menuId) {
-    return new Promise(resolve => {
-      chrome.contextMenus.remove(menuId, () => {
-        // Suppress Chrome's lastError to avoid console spam
-        if (chrome.runtime.lastError) {
-          // Silently ignore - menu item probably doesn't exist
-        }
-        resolve();
-      });
-    });
-  }
-
   createEmptyMenuItem() {
     chrome.contextMenus.create({
       id: "no-youtube-tabs",
       parentId: "youtube-tabs-root",
       title: "No YouTube videos open",
       enabled: false,
-      contexts: ["page", "selection", "link"]
+      contexts: MENU_CONTEXTS
     });
   }
 
@@ -138,7 +131,7 @@ class YouTubeTabManager {
 
   createMenuStructure(windowGroups) {
     const windowCount = windowGroups.size;
-    
+
     if (windowCount === 1) {
       // Single window - add tabs directly
       const tabs = Array.from(windowGroups.values())[0];
@@ -156,60 +149,84 @@ class YouTubeTabManager {
 
   createWindowMenuItem(windowId, windowIndex, tabCount) {
     const windowMenuId = `window-${windowId}`;
-    
+
     chrome.contextMenus.create({
       id: windowMenuId,
       parentId: "youtube-tabs-root",
       title: `Window ${windowIndex} (${tabCount} video${tabCount === 1 ? '' : 's'})`,
-      contexts: ["page", "selection", "link"]
+      contexts: MENU_CONTEXTS
     });
-    
+
     this.tabsCache.set(windowMenuId, { type: 'window', windowId });
     return windowMenuId;
   }
 
+  // Each video gets a submenu: Go to video / Play / Pause.
   createTabMenuItem(tab, parentId) {
-    const menuId = `tab-${tab.id}`;
-    const title = this.formatVideoTitle(tab.title);
-    
+    const videoMenuId = `tab-${tab.id}`;
+
     chrome.contextMenus.create({
-      id: menuId,
+      id: videoMenuId,
       parentId: parentId,
-      title: title,
-      contexts: ["page", "selection", "link"]
+      title: this.formatVideoTitle(tab.title),
+      contexts: MENU_CONTEXTS
     });
-    
-    this.tabsCache.set(menuId, { type: 'tab', tabId: tab.id, windowId: tab.windowId });
+
+    const actions = [
+      { action: 'goto', title: 'Go to video' },
+      { action: 'play', title: 'Play' },
+      { action: 'pause', title: 'Pause' }
+    ];
+
+    actions.forEach(({ action, title }) => {
+      const actionMenuId = `${videoMenuId}-${action}`;
+      chrome.contextMenus.create({
+        id: actionMenuId,
+        parentId: videoMenuId,
+        title: title,
+        contexts: MENU_CONTEXTS
+      });
+      this.tabsCache.set(actionMenuId, {
+        type: 'action',
+        action,
+        tabId: tab.id,
+        windowId: tab.windowId
+      });
+    });
   }
 
   formatVideoTitle(title) {
     if (!title) return "YouTube Video";
-    
+
     // Clean up common YouTube title patterns
     const cleanTitle = title
       .replace(/ - YouTube$/, '')
       .replace(/^\[.*?\]\s*/, '')
       .replace(/\s*\|\s*YouTube$/, '')
       .trim();
-    
+
     // Truncate if too long
     const MAX_LENGTH = 50;
-    return cleanTitle.length > MAX_LENGTH 
+    return cleanTitle.length > MAX_LENGTH
       ? `${cleanTitle.substring(0, MAX_LENGTH - 3)}...`
       : cleanTitle;
   }
 
   async handleMenuClick(info) {
     const menuData = this.tabsCache.get(info.menuItemId);
-    
-    if (!menuData || menuData.type !== 'tab') {
+
+    if (!menuData || menuData.type !== 'action') {
       return;
     }
 
     try {
-      await this.activateTab(menuData.tabId, menuData.windowId);
+      if (menuData.action === 'goto') {
+        await this.activateTab(menuData.tabId, menuData.windowId);
+      } else {
+        await this.setPlayback(menuData.tabId, menuData.action === 'play');
+      }
     } catch (error) {
-      console.error('Failed to activate tab:', error);
+      console.error('Menu action failed:', error);
       // Tab might be closed, refresh menus
       this.updateMenus();
     }
@@ -219,6 +236,28 @@ class YouTubeTabManager {
     // Activate the tab first, then focus its window (needed on macOS).
     await chrome.tabs.update(tabId, { active: true });
     await chrome.windows.update(windowId, { focused: true });
+  }
+
+  async setPlayback(tabId, shouldPlay) {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: (play) => {
+        const video = document.querySelector('video');
+        if (!video) return false;
+        if (play) {
+          // play() returns a promise; ignore autoplay rejections.
+          video.play().catch(() => {});
+        } else {
+          video.pause();
+        }
+        return true;
+      },
+      args: [shouldPlay]
+    });
+
+    if (!results[0]?.result) {
+      console.log('No video element found in tab', tabId);
+    }
   }
 }
 
